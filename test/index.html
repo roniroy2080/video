@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <title>Page Title</title>
+    <meta name='viewport' content='width=device-width, initial-scale=1'>
+    <!-- <link rel='stylesheet' type='text/css' media='screen' href='main.css'> -->
+    <!-- <script src='main.js'></script> -->
+</head>
+<body>
+
+    <div>
+        <h6>LOCAL : <span id="local_joined"></span></h6>
+        <h6>REMOTE : <span id="remote_username"></span></h6>
+    </div>
+
+    <div class="container">
+
+    </div>
+
+    <input type="text" id="name" placeholder="Enter name">
+    <input type="text" id="room_id" placeholder="Room id">
+    <button id="join_btn">JOIN</button>
+    
+
+    <div id="msg_part">
+
+    </div>
+
+    <div>
+        <input type="text" id="msg_in">
+        <button id="msg_send_btn">send MSG</button>
+    </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.2/socket.io.js"></script>
+<script>
+let configuration = {'iceServers': [{'urls': 'stun:stun.l.google.com:19302'}]}
+let peerConnection = new RTCPeerConnection(configuration);
+
+let  socket = io('https://v-calling.onrender.com/');
+
+
+let datachannel = peerConnection.createDataChannel('msg');
+
+datachannel.onopen = () => console.log('data channell open')
+let getOffer = async() =>{
+    let offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer)
+    return offer;
+}
+
+let getAnswer = async(offer) =>{
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+    let ans = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(ans);
+    return ans;
+}
+
+let room_id;
+let usernamename;
+
+document.getElementById('join_btn').onclick = () =>{
+
+    let room = document.getElementById('room_id');
+    room = room.value.trim()
+    room_id = room;
+    let name = document.getElementById('name');
+    name = name.value.trim()
+    usernamename = name
+    socket.emit('joining:room',{
+        to:room,
+        name:name,
+        uuid:'asdas'
+    })
+}
+
+
+
+socket.on('other:joined:room', async name =>{
+    document.getElementById('remote_username').innerHTML = name;
+ 
+    let offer = await getOffer();
+    socket.emit('other:joined:success',{
+        to:room_id,
+        name:usernamename,
+        offer
+    })
+
+})
+
+socket.on('other:joined:room:success', async name_get =>{
+
+    
+    let {name,offer} = name_get;
+
+    document.getElementById('remote_username').innerHTML = name;
+
+    let answer = await getAnswer(offer);
+
+    socket.emit('answer:server',{
+        to:room_id,
+        answer
+    })
+})
+
+socket.on('answer:client', async answer =>{
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+})
+
+
+
+socket.on('nego:offer:client', async offer_nego =>{
+    let answer = await getAnswer(offer_nego);
+    socket.emit('nego:answer:server',{
+        to:room_id,
+        answer
+    })
+})
+
+socket.on('nego:answer:client', async answer =>{
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+})
+
+socket.on('i:joined:successfully',()=>{
+    document.getElementById('local_joined').innerHTML = 'joined';
+})
+
+peerConnection.onnegotiationneeded = async() =>{
+    try {
+        let offer = await getOffer()
+        socket.emit('nego:offer:server',{
+            to:room_id,
+            offer
+        })
+    } catch (error) {
+        
+    }
+}
+
+
+document.getElementById('msg_send_btn').onclick = () =>{
+    let msg = document.getElementById('msg_in')
+    msg = msg.value.trim()
+    datachannel.send(msg)
+}
+
+
+peerConnection.ondatachannel = e =>{
+    let receive_ = e.channel;
+    receive_.onmessage = event =>{
+        // alert(event.data);
+
+        let msg_part = document.getElementById('msg_part');
+        let p = document.createElement('p');
+        p.innerHTML = `
+        <p>${event.data}</p>
+        `
+        msg_part.prepend(p);
+
+    }
+}
+
+
+</script>
+</body>
+</html>
